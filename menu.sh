@@ -4,8 +4,6 @@
 # Xray Fragment Fingerprint - Linux Management TUI
 # ==============================================================================
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 XRAY_BIN="${SCRIPT_DIR}/xray"
 CONFIG_FILE="${SCRIPT_DIR}/config.json"
@@ -303,38 +301,74 @@ download_xray() {
     local download_url=""
     local tag_name=""
 
-    if command -v curl >/dev/null 2>&1; then
-        local release_json
-        release_json="$(curl -sSL -H "User-Agent: Mozilla/5.0" "$api_url")"
-        tag_name="$(echo "$release_json" | grep -o '"tag_name": *"[^"]*"' | head -n1 | cut -d'"' -f4 || true)"
-        download_url="$(echo "$release_json" | grep "browser_download_url" | grep "$target_zip_name" | cut -d '"' -f 4 | head -n1 || true)"
-    else
-        local release_json
-        release_json="$(wget -qO- --header="User-Agent: Mozilla/5.0" "$api_url")"
-        tag_name="$(echo "$release_json" | grep -o '"tag_name": *"[^"]*"' | head -n1 | cut -d'"' -f4 || true)"
-        download_url="$(echo "$release_json" | grep "browser_download_url" | grep "$target_zip_name" | cut -d '"' -f 4 | head -n1 || true)"
+    # 1. Try parsing using python3 if available (safest & most accurate)
+    if command -v python3 >/dev/null 2>&1; then
+        download_url="$(python3 -c "
+import urllib.request, json
+try:
+    req = urllib.request.Request('${api_url}', headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode())
+        for a in data.get('assets', []):
+            if a.get('name') == '${target_zip_name}':
+                print(a.get('browser_download_url', ''))
+                break
+except:
+    pass
+" 2>/dev/null || true)"
     fi
 
-    # Fallback to direct release URL if API rate-limited
+    # 2. Fallback to regex extraction via curl / wget
     if [ -z "$download_url" ]; then
-        echo -e "${C_YELLOW}GitHub API rate limit or match issue. Falling back to latest direct release URL...${C_RESET}"
+        local raw_content=""
+        if command -v curl >/dev/null 2>&1; then
+            raw_content="$(curl -sSL -H "User-Agent: Mozilla/5.0" "$api_url" 2>/dev/null || true)"
+        else
+            raw_content="$(wget -qO- --header="User-Agent: Mozilla/5.0" "$api_url" 2>/dev/null || true)"
+        fi
+        download_url="$(echo "$raw_content" | grep -o "https://[^\"]*download/[^\"]*/${target_zip_name}" | head -n1 || true)"
+    fi
+
+    # 3. Direct GitHub release fallback URL
+    if [ -z "$download_url" ]; then
+        echo -e "${C_YELLOW}GitHub API limit or metadata issue. Using direct release download link...${C_RESET}"
         download_url="https://github.com/XTLS/Xray-core/releases/latest/download/${target_zip_name}"
     else
-        echo -e "${C_GREEN}[✓] Latest release: ${tag_name}${C_RESET}"
+        echo -e "${C_GREEN}[✓] Download link resolved successfully.${C_RESET}"
     fi
 
     local temp_zip="${SCRIPT_DIR}/xray_temp.zip"
     local temp_dir="${SCRIPT_DIR}/xray_temp_extract"
 
-    echo -e "${C_CYAN}Downloading from ${download_url}...${C_RESET}"
+    echo -e "${C_CYAN}Downloading ${target_zip_name}...${C_RESET}"
+    rm -f "$temp_zip"
+    rm -rf "$temp_dir"
+
     if command -v curl >/dev/null 2>&1; then
-        curl -L -o "$temp_zip" "$download_url"
+        curl -L --fail --progress-bar -o "$temp_zip" "$download_url" || {
+            echo -e "${C_RED}[X] Download failed. Check your internet connection or proxy.${C_RESET}"
+            rm -f "$temp_zip"
+            pause
+            return
+        }
     else
-        wget -O "$temp_zip" "$download_url"
+        wget -q --show-progress -O "$temp_zip" "$download_url" || {
+            echo -e "${C_RED}[X] Download failed. Check your internet connection or proxy.${C_RESET}"
+            rm -f "$temp_zip"
+            pause
+            return
+        }
+    fi
+
+    # Verify if zip file is valid
+    if ! unzip -tq "$temp_zip" >/dev/null 2>&1; then
+        echo -e "${C_RED}[X] Error: Downloaded file is not a valid zip archive.${C_RESET}"
+        rm -f "$temp_zip"
+        pause
+        return
     fi
 
     echo -e "${C_GRAY}Extracting package...${C_RESET}"
-    rm -rf "$temp_dir"
     mkdir -p "$temp_dir"
     unzip -q -o "$temp_zip" -d "$temp_dir"
 
@@ -351,6 +385,8 @@ download_xray() {
         mv "${temp_dir}/xray" "$XRAY_BIN"
         chmod +x "$XRAY_BIN"
         echo -e "${C_GREEN}[✓] Installed xray binary${C_RESET}"
+    else
+        echo -e "${C_RED}[X] Error: xray binary not found in extracted archive.${C_RESET}"
     fi
 
     for asset in geoip.dat geosite.dat; do
@@ -364,7 +400,7 @@ download_xray() {
     rm -rf "$temp_zip" "$temp_dir"
 
     echo ""
-    echo -e "${C_GREEN}[✓] Xray successfully updated! New version: $(get_version)${C_RESET}"
+    echo -e "${C_GREEN}[✓] Xray successfully updated! Current version: $(get_version)${C_RESET}"
     pause
 }
 

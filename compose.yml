@@ -4,8 +4,6 @@ services:
     container_name: xray-fragment-mitm
     restart: unless-stopped
     network_mode: "host"
-    ports:
-      - "40443:40443"
     volumes:
       - ./config.json:/etc/xray/config.json:ro
     command: [ "run", "-c", "/etc/xray/config.json" ]
