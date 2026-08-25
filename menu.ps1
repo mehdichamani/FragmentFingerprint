@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Interactive TUI script for managing Xray Fragment Fingerprint.
+    Interactive TUI script for managing Xray Fragment Fingerprint on Windows.
 #>
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -30,7 +30,7 @@ function Show-Header {
         $taskColor = "Cyan"
     }
 
-    $version = "Unknown"
+    $version = "Not installed"
     if (Test-Path $XrayExe) {
         try {
             $verOutput = & $XrayExe version 2>$null
@@ -41,11 +41,11 @@ function Show-Header {
     }
 
     Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "                XRAY FRAGMENT FINGERPRINT MANAGER               " -ForegroundColor Yellow -BackgroundColor Black
+    Write-Host "                XRAY FRAGMENT FINGERPRINT MANAGER (Windows)     " -ForegroundColor Yellow -BackgroundColor Black
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host " Working Dir    : $ScriptDir" -ForegroundColor Gray
     Write-Host " Xray Version   : $version" -ForegroundColor Gray
-    Write-Host -NoNewline " Status         : "
+    Write-Host -NoNewline " Process Status : "
     Write-Host "$statusText" -ForegroundColor $statusColor
     Write-Host -NoNewline " Task Scheduler : "
     Write-Host "$taskScheduled" -ForegroundColor $taskColor
@@ -55,17 +55,17 @@ function Show-Header {
 
 function Start-TerminalInstance {
     Show-Header
-    Write-Host "[1] STARTING XRAY IN THIS TERMINAL..." -ForegroundColor Yellow
+    Write-Host "[1] STARTING XRAY IN THIS TERMINAL (Foreground)..." -ForegroundColor Yellow
     Write-Host "Press Ctrl+C to stop Xray and return to menu." -ForegroundColor DarkGray
     Write-Host "----------------------------------------------------------------" -ForegroundColor Gray
     
     if (-not (Test-Path $XrayExe)) {
         Write-Host "Error: xray.exe not found at $XrayExe" -ForegroundColor Red
+        Write-Host "Please select Option [4] to download Xray-core first." -ForegroundColor Yellow
         Pause-Menu
         return
     }
 
-    # Check if config exists
     if (Test-Path $ConfigFile) {
         & $XrayExe run -c $ConfigFile
     } else {
@@ -82,14 +82,20 @@ function Add-ToTaskScheduler {
     Write-Host "[2] ADDING TO TASK SCHEDULER (Startup on Logon)..." -ForegroundColor Yellow
     Write-Host ""
 
-    # Ensure run_hidden.vbs exists
+    if (-not (Test-Path $XrayExe)) {
+        Write-Host "Error: xray.exe not found at $XrayExe. Download it first (Option 4)." -ForegroundColor Red
+        Pause-Menu
+        return
+    }
+
+    # Ensure run_hidden.vbs exists with correct relative path
     $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "$ScriptDir"
-WshShell.Run """$XrayExe""", 0, False
+WshShell.Run """$XrayExe"" run -c ""$ConfigFile""", 0, False
 "@
     Set-Content -Path $VbsPath -Value $vbsContent -Encoding ASCII
-    Write-Host "[✓] Verified $VbsPath" -ForegroundColor Green
+    Write-Host "[✓] Generated hidden background launcher: $VbsPath" -ForegroundColor Green
 
     try {
         $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$VbsPath`"" -WorkingDirectory $ScriptDir
@@ -138,18 +144,17 @@ function Remove-FromTaskScheduler {
 
 function Download-LatestXray {
     Show-Header
-    Write-Host "[4] DOWNLOADING LATEST XRAY-CORE FROM GITHUB..." -ForegroundColor Yellow
+    Write-Host "[4] DOWNLOADING / UPDATING LATEST XRAY-CORE FROM GITHUB..." -ForegroundColor Yellow
     Write-Host ""
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 
-    # Check if proxy is needed / available
     $apiUrl = "https://api.github.com/repos/XTLS/Xray-core/releases/latest"
-    Write-Host "Fetching latest release metadata from $apiUrl..." -ForegroundColor Gray
+    Write-Host "Fetching latest release metadata from GitHub..." -ForegroundColor Gray
 
     try {
         $headers = @{
-            "User-Agent" = "PowerShell-Xray-Updater"
+            "User-Agent" = "PowerShell-Xray-Manager"
         }
         $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 15
         $tagName = $release.tag_name
@@ -211,7 +216,7 @@ function Download-LatestXray {
         Write-Host "[✓] Xray successfully updated to $tagName!" -ForegroundColor Green
     } catch {
         Write-Host "[X] Error downloading/updating Xray: $_" -ForegroundColor Red
-        Write-Host "Note: If GitHub API has rate limits or network issues, ensure your proxy or connection is accessible." -ForegroundColor Gray
+        Write-Host "Note: If GitHub API has rate limits or network issues, check your internet connectivity or proxy." -ForegroundColor Gray
     }
 
     Pause-Menu
@@ -219,15 +224,22 @@ function Download-LatestXray {
 
 function Stop-Processes {
     Show-Header
-    Write-Host "[5] STOPPING XRAY PROCESSES..." -ForegroundColor Yellow
+    Write-Host "[5] STOPPING XRAY PROCESSES & TASKS..." -ForegroundColor Yellow
     Write-Host ""
+
+    # Stop scheduled task if running
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($task -and $task.State -eq "Running") {
+        Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        Write-Host "[✓] Stopped Scheduled Task '$TaskName'." -ForegroundColor Green
+    }
 
     $procs = Get-Process -Name "xray" -ErrorAction SilentlyContinue
     if (-not $procs) {
         Write-Host "No running xray.exe instances found." -ForegroundColor DarkYellow
     } else {
         $count = $procs.Count
-        taskkill /F /IM xray.exe
+        taskkill /F /IM xray.exe 2>$null | Out-Null
         Start-Sleep -Seconds 1
         Write-Host "[✓] Stopped $count xray instance(s)." -ForegroundColor Green
     }

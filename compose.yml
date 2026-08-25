@@ -1,10 +1,16 @@
 services:
   xray:
     image: ghcr.io/xtls/xray-core:26.7.28
-    container_name: xray-mitm
-    restart: always
+    container_name: xray-fragment-mitm
+    restart: unless-stopped
+    network_mode: "host"
     ports:
       - "40443:40443"
     volumes:
       - ./config.json:/etc/xray/config.json:ro
     command: [ "run", "-c", "/etc/xray/config.json" ]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
