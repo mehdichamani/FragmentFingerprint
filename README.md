@@ -1,46 +1,42 @@
 # Fragment Fingerprint
 
-A local MitM relay and DPI bypass solution powered by **Xray-core** using advanced TCP/TLS Hello packet fragmentation and pinned certificate fingerprinting.
+این پروژه یک راه‌حل میانی محلی (Local MitM Proxy / Relay) بر پایه هسته **Xray-core** (نسخه `26.7.28` و بالاتر) است که برای **دور زدن سیستم فیلترینگ، DPI و تحریم‌ها (از جمله تحریم ابزار Antigravity)** از طریق تکنیک‌های پیشرفته **Fragment (قطعه‌بندی پکت‌های TCP / TLS Hello)** و بازسازی ساختار TLS به همراه پین کردن اثر انگشت گواهی (**Certificate SHA-256 Pinning**) توسعه یافته است.
 
-📖 **[راهنمای فارسی (Persian README)](README.fa.md)**
-
----
-
-## Features & Entry Points
-
-- **🖥️ Windows Native TUI:** Run [menu.bat](menu.bat) to download Xray-core, run in foreground, or register as a background Task Scheduler auto-start.
-- **🐧 Linux Native TUI:** Run `./menu.sh` to download the architecture-matching binary (`x86_64`, `arm64`, `armv7`), run foreground, or manage system/user `systemd` auto-start services.
-- **🐳 Docker Compose:** Run `docker compose up -d` using [compose.yml](compose.yml) on any OS with Docker.
+> 🌐 **[English Documentation (README.en.md)](README.en.md)**
 
 ---
 
-## Quick Start
+## 🎯 هدف پروژه و نحوه کارکرد
 
-1. **Configure Target:** Edit [config.json](config.json) and replace `"redirect": "188.114.97.6:443"` with your target server/CDN IP and port.
-2. **Run by Method:**
-   - **Linux:**
-     ```bash
-     chmod +x menu.sh
-     ./menu.sh
-     ```
-   - **Windows:** Double-click [menu.bat](menu.bat) or execute:
-     ```powershell
-     powershell -ExecutionPolicy Bypass -File .\menu.ps1
-     ```
-   - **Docker (Windows / Linux):**
-     ```bash
-     docker compose up -d
-     ```
-3. **Client Configuration:** Point your VLESS/Trojan/TLS client to:
-   - **Address:** `127.0.0.1` (or local LAN IP)
-   - **Port:** `40443`
-   - **Pinned Certificate SHA-256:** `3de5b7bd48c18c9ff057d8961f24c16555a7e387ebb509e1efb1315303695c82`
+سیستم‌های فیلترینگ و فایروال‌های DPI پکت‌های `TLS Client Hello` را برای شناسایی دامنه‌ها و پروتکل‌ها (نظیر VLESS / Trojan روی TLS) اسکن و مسدود می‌کنند. همچنین برخی سرویس‌های خارجی مانند Antigravity به دلیل تحریم یا تداخل شبکه نیاز به اتصال پاک و TLS دست‌نخورده دارند.
+
+این اسکریپت ترافیک کلاینت شما را در سیستم دریافت کرده، آن را با گواهی امن پین‌شده تطبیق می‌دهد و سپس پکت‌های ارسالی به مقصد نهایی را به‌صورت قطعه‌بندی‌شده (Fragment) همراه با تأخیر و رمزنگاری مشخص ارسال می‌کند تا شناسایی و مسدود نشود.
+
+```text
+[ کلاینت (PattN / v2rayN / V2Box / ...) ]
+                   │
+                   ▼ (اتصال با TLS پین‌شده به 127.0.0.1:40443)
+        [ هسته Xray این پروژه ]
+                   │
+                   ▼ (تکنیک Fragment + سفارشی‌سازی TLS به سرور اصلی)
+[ سرور نهایی / CDN / آی‌پی سرور (مثلاً 188.114.97.6:443) ]
+```
 
 ---
 
-## Credits & Donation
+## 📚 راهنماها و مستندات تکمیلی
 
-- **Creator:** [@patterniha](https://t.me/patterniha)
-- **USDT (BEP20):** `0x76a768B53Ca77B43086946315f0BDF21156bF424`
-- **USDT (TRC20):** `TU5gKvKqcXPn8itp1DouBCwcqGHMemBm8o`
-- **TON:** `UQAc-mZB3y7uxWHKiMmq0ORZEYgycWDWZ4V1k73HsXvTJx-i`
+جهت راه‌اندازی و استفاده، راهنماهای تفکیک‌شده زیر را دنبال کنید:
+
+- ⚙️ **[راهنمای راه‌اندازی و اجرای هسته (ویندوز، لینوکس، داکر و استارتاپ)](CORE_SETUP.md)**
+- 🛡️ **[راهنمای تنظیمات کلاینت و رفع تحریم Antigravity](CLIENT_CONFIG.md)**
+
+---
+
+## 👥 سازنده و طرح اولیه (Credits)
+
+ایده و طرح اولیه این روش توسط **[@patterniha](https://t.me/patterniha)** ارائه شده است.  
+این ریپازیتوری صرفاً جهت **پیاده‌سازی آسان، اتوماسیون کامل اجرا و مدیریت سرویس‌ها در محیط‌های مختلف** توسعه یافته است.
+
+- **کانال تلگرام طراح:** [@patterniha](https://t.me/patterniha)
+- **کلاینت‌های پیشنهادی:** [PattN](https://github.com/patterniha/PattN) / [v2rayN](https://github.com/2dust/v2rayN)

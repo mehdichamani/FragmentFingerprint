@@ -1,1 +1,30 @@
+# Binaries and executables
 *.exe
+xray
+xray.exe
+xray.bak
+xray.exe.bak
+
+# Routing data files
+*.dat
+geoip.dat
+geosite.dat
+
+# Temporary archives and folders
+*.zip
+*.tar.gz
+*.tgz
+xray_temp.zip
+xray_temp_extract/
+xray_update_temp.zip
+xray_update_temp/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Dynamic / Generated scripts
+run_hidden.vbs
